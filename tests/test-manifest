@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+manifest="$root/manifest.json"
+
+python3 - "$manifest" <<'PY'
+import json, sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+assert path.is_file(), "manifest.json missing"
+data = json.loads(path.read_text(encoding="utf-8"))
+assert data["schemaVersion"] == 1
+assert data["id"] == "io.github.ypmrg.omarchy-easy-kanban"
+assert not data["id"].startswith("omarchy.")
+assert data["name"] == "Easy Kanban"
+assert data["version"] == "0.1.0"
+assert data["author"] == "Matthieu G.C."
+assert data["license"] == "MIT"
+assert data["kinds"] == ["bar-widget"]
+assert data["entryPoints"]["barWidget"] == "Widget.qml"
+assert (path.parent / data["entryPoints"]["barWidget"]).is_file()
+assert (path.parent / "preview.png").is_file()
+bar = data["barWidget"]
+assert bar["displayName"] == "Easy Kanban"
+assert bar["category"] == "Productivity"
+assert bar["allowMultiple"] is False
+assert bar["defaultSection"] == "right"
+assert "schema" not in bar
+
+readme = (path.parent / "README.md").read_text(encoding="utf-8")
+assert "omarchy plugin add" in readme
+assert "~/.local/state/omarchy/easy-kanban.json" in readme
+assert "Todo" in readme and "In Progress" in readme and "Done" in readme
+assert "widget to stay on the bar" in readme.lower() or "remain on the bar" in readme.lower()
+
+print("test-manifest: ok")
+PY

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.ypmrg.omarchy-easy-kanban",
+  "name": "Easy Kanban",
+  "version": "0.1.0",
+  "author": "Matthieu G.C.",
+  "license": "MIT",
+  "description": "Local Kanban boards from the Omarchy bar",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "Widget.qml" },
+  "barWidget": {
+    "displayName": "Easy Kanban",
+    "description": "Multiple local boards with columns, tickets, and deadline reminders",
+    "category": "Productivity",
+    "defaultSection": "right",
+    "allowMultiple": false
+  }
+}

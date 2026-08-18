@@ -1,0 +1,249 @@
+#!/usr/bin/env node
+"use strict";
+
+const assert = require("assert");
+const path = require("path");
+const modelPath = path.join(__dirname, "..", "Model.js");
+
+let Model;
+try {
+  Model = require(modelPath);
+} catch (err) {
+  console.error(err);
+  process.exit(1);
+}
+
+const now = new Date("2026-08-17T10:00:00.000Z");
+
+assert.strictEqual(Model.FALLBACK_COLOR, "#6B8AFD");
+assert.strictEqual(Model.DEFAULT_BOARD_NAME, "Personal");
+assert.deepStrictEqual(Model.PALETTE, [
+  "#E85D4C", "#E8913A", "#E8C547", "#7BC96F",
+  "#3DB89A", "#5B9FD6", "#6B8AFD", "#9B7EDE",
+  "#D66BAD", "#A0785A", "#8B95A8", "#5C6673"
+]);
+
+assert.strictEqual(Model.normalizeHex("#6bf"), "#66BBFF");
+assert.strictEqual(Model.normalizeHex("#6B8AFD"), "#6B8AFD");
+assert.strictEqual(Model.normalizeHex("6B8AFD"), "#6B8AFD");
+assert.strictEqual(Model.normalizeHex("nope"), null);
+assert.strictEqual(Model.normalizeHex(""), null);
+
+assert.strictEqual(Model.validName("  Work  "), "Work");
+assert.strictEqual(Model.validName(""), null);
+assert.strictEqual(Model.validName("x".repeat(41)), null);
+assert.strictEqual(Model.validTitle("  Hi  "), "Hi");
+assert.strictEqual(Model.validTitle(""), null);
+assert.strictEqual(Model.validDescription(""), "");
+assert.strictEqual(Model.validDescription("x".repeat(4001)), null);
+assert.deepStrictEqual(Model.validDeadline(""), { ok: true, value: null });
+assert.deepStrictEqual(Model.validDeadline("2026-08-20"), { ok: true, value: "2026-08-20" });
+assert.strictEqual(Model.validDeadline("2026-13-01").ok, false);
+assert.strictEqual(Model.validDeadline("tomorrow").ok, false);
+
+assert.strictEqual(Model.todayKey(new Date(2026, 7, 17, 23, 30, 0)), "2026-08-17");
+assert.strictEqual(Model.isoNow(now), "2026-08-17T10:00:00.000Z");
+assert.match(Model.newId("board"), /^board-[0-9a-f]{8}$/);
+
+assert.strictEqual(Model.panelWidth(3, 240, 10, 24, 2000), 24 + 3 * 240 + 2 * 10);
+assert.strictEqual(Model.panelWidth(1, 240, 10, 24, 2000), 24 + 240);
+assert.strictEqual(Model.panelWidth(8, 240, 10, 24, 800), 800);
+
+const state = Model.defaultState(now);
+assert.strictEqual(state.version, 1);
+assert.strictEqual(state.boards.length, 1);
+assert.strictEqual(state.boards[0].name, "Personal");
+assert.strictEqual(state.activeBoardId, state.boards[0].id);
+assert.deepStrictEqual(state.boards[0].columns.map((c) => [c.name, c.color]), [
+  ["Todo", "#6B8AFD"],
+  ["In Progress", "#E8913A"],
+  ["Done", "#7BC96F"]
+]);
+state.boards[0].columns.forEach((c) => assert.deepStrictEqual(c.tickets, []));
+
+const missing = Model.parseState("", now);
+assert.strictEqual(missing.ok, true);
+assert.strictEqual(missing.recovered, true);
+assert.strictEqual(missing.state.boards[0].name, "Personal");
+
+const corrupt = Model.parseState("{", now);
+assert.strictEqual(corrupt.recovered, true);
+
+const badVersion = Model.parseState(JSON.stringify({ version: 2, boards: [] }), now);
+assert.strictEqual(badVersion.recovered, true);
+
+const unknownActive = Model.parseState(JSON.stringify({
+  version: 1,
+  activeBoardId: "board-deadbeef",
+  boards: [{
+    id: "board-aaaaaaaa",
+    name: "X",
+    createdAt: "2026-08-17T10:00:00.000Z",
+    columns: [{ id: "col-aaaaaaaa", name: "Todo", color: "nope", tickets: null }]
+  }]
+}), now);
+assert.strictEqual(unknownActive.recovered, false);
+assert.strictEqual(unknownActive.state.activeBoardId, "board-aaaaaaaa");
+assert.strictEqual(unknownActive.state.boards[0].columns[0].color, "#6B8AFD");
+assert.deepStrictEqual(unknownActive.state.boards[0].columns[0].tickets, []);
+
+let s = Model.defaultState(now);
+const created = Model.createBoard(s, "Work", now);
+assert.strictEqual(created.ok, true);
+assert.strictEqual(created.state.boards.length, 2);
+assert.strictEqual(created.state.activeBoardId, created.boardId);
+assert.deepStrictEqual(
+  created.state.boards[1].columns.map((c) => c.name),
+  ["Todo", "In Progress", "Done"]
+);
+assert.notStrictEqual(created.state.boards[1].columns[0].id, s.boards[0].columns[0].id);
+
+assert.strictEqual(Model.createBoard(s, "", now).ok, false);
+assert.strictEqual(Model.renameBoard(created.state, created.boardId, "Office").state.boards[1].name, "Office");
+
+const only = Model.deleteBoard(Model.defaultState(now), Model.defaultState(now).boards[0].id);
+assert.strictEqual(only.ok, false);
+
+const two = created.state;
+const firstId = two.boards[0].id;
+const secondId = two.boards[1].id;
+const deletedActive = Model.deleteBoard(two, secondId);
+assert.strictEqual(deletedActive.ok, true);
+assert.strictEqual(deletedActive.state.boards.length, 1);
+assert.strictEqual(deletedActive.state.activeBoardId, firstId);
+
+s = Model.defaultState(now);
+let boardId = s.boards[0].id;
+const col = Model.createColumn(s, boardId, "Review", "#d66bad");
+assert.strictEqual(col.ok, true);
+assert.strictEqual(col.state.boards[0].columns[3].color, "#D66BAD");
+assert.strictEqual(Model.deleteColumn(s, boardId, s.boards[0].columns[0].id).ok, true);
+assert.strictEqual(
+  Model.deleteColumn(
+    { version: 1, activeBoardId: boardId, boards: [{ id: boardId, name: "P", createdAt: Model.isoNow(now), columns: [s.boards[0].columns[0]] }] },
+    boardId,
+    s.boards[0].columns[0].id
+  ).ok,
+  false
+);
+
+s = Model.defaultState(now);
+boardId = s.boards[0].id;
+const todoId = s.boards[0].columns[0].id;
+const ticket = Model.createTicket(s, boardId, todoId, {
+  title: "  Write README  ",
+  description: "Ship it",
+  deadline: "2026-08-20"
+}, now);
+assert.strictEqual(ticket.ok, true);
+const t = ticket.state.boards[0].columns[0].tickets[0];
+assert.strictEqual(t.title, "Write README");
+assert.strictEqual(t.createdAt, "2026-08-17T10:00:00.000Z");
+assert.strictEqual(t.deadline, "2026-08-20");
+assert.strictEqual(t.lastReminderDate, null);
+
+const updated = Model.updateTicket(ticket.state, boardId, t.id, { title: "Edit README", deadline: null });
+assert.strictEqual(updated.state.boards[0].columns[0].tickets[0].title, "Edit README");
+assert.strictEqual(updated.state.boards[0].columns[0].tickets[0].deadline, null);
+assert.strictEqual(updated.state.boards[0].columns[0].tickets[0].createdAt, t.createdAt);
+
+const badDesc = Model.updateTicket(updated.state, boardId, t.id, {
+  title: "Ok",
+  description: "x".repeat(4001)
+});
+assert.strictEqual(badDesc.ok, false);
+assert.strictEqual(badDesc.state.boards[0].columns[0].tickets[0].title, "Edit README");
+assert.strictEqual(badDesc.state.boards[0].columns[0].tickets[0].description, "Ship it");
+
+const badDeadline = Model.updateTicket(updated.state, boardId, t.id, {
+  title: "Ok",
+  deadline: "tomorrow"
+});
+assert.strictEqual(badDeadline.ok, false);
+assert.strictEqual(badDeadline.state.boards[0].columns[0].tickets[0].title, "Edit README");
+assert.strictEqual(badDeadline.state.boards[0].columns[0].tickets[0].deadline, null);
+
+const removed = Model.deleteTicket(updated.state, boardId, t.id);
+assert.strictEqual(removed.state.boards[0].columns[0].tickets.length, 0);
+
+s = Model.defaultState(now);
+const bId = s.boards[0].id;
+const todo = s.boards[0].columns[0].id;
+const doing = s.boards[0].columns[1].id;
+const done = s.boards[0].columns[2].id;
+s = Model.createTicket(s, bId, todo, { title: "A" }, now).state;
+s = Model.createTicket(s, bId, todo, { title: "B" }, now).state;
+s = Model.createTicket(s, bId, todo, { title: "C" }, now).state;
+const ids = s.boards[0].columns[0].tickets.map((t) => t.id);
+const moved = Model.moveTicket(s, bId, ids[0], doing, 0);
+assert.strictEqual(moved.moved, true);
+assert.strictEqual(moved.state.boards[0].columns[0].tickets.map((t) => t.title).join(""), "BC");
+assert.strictEqual(moved.state.boards[0].columns[1].tickets[0].title, "A");
+const same = Model.moveTicket(moved.state, bId, ids[0], doing, 0);
+assert.strictEqual(same.moved, false);
+
+const downDrop = Model.moveTicket(s, bId, ids[0], todo, 2);
+assert.strictEqual(downDrop.moved, true);
+assert.strictEqual(downDrop.state.boards[0].columns[0].tickets.map((t) => t.title).join(""), "BAC");
+
+const jLast = Model.moveTicket(s, bId, ids[2], todo, 3);
+assert.strictEqual(jLast.moved, false);
+assert.strictEqual(jLast.state.boards[0].columns[0].tickets.map((t) => t.title).join(""), "ABC");
+
+const kFirst = Model.moveTicket(s, bId, ids[0], todo, -1);
+assert.strictEqual(kFirst.moved, false);
+assert.strictEqual(kFirst.state.boards[0].columns[0].tickets.map((t) => t.title).join(""), "ABC");
+
+const reordered = Model.reorderColumn(s, bId, done, 0);
+assert.strictEqual(reordered.state.boards[0].columns[0].name, "Done");
+
+assert.strictEqual(Model.isDoneColumnName("Done"), true);
+assert.strictEqual(Model.isDoneColumnName("done"), true);
+assert.strictEqual(Model.isDoneColumnName("Todo"), false);
+assert.strictEqual(Model.dueToday("2026-08-17", "2026-08-17"), true);
+assert.strictEqual(Model.overdue("2026-08-16", "2026-08-17"), true);
+assert.strictEqual(Model.overdue("2026-08-17", "2026-08-17"), false);
+
+let r = Model.defaultState(now);
+const rBoard = r.boards[0].id;
+const rTodo = r.boards[0].columns[0].id;
+const rDone = r.boards[0].columns[2].id;
+r = Model.createTicket(r, rBoard, rTodo, { title: "Due", deadline: "2026-08-17" }, now).state;
+r = Model.createTicket(r, rBoard, rTodo, { title: "Late", deadline: "2026-08-16" }, now).state;
+r = Model.createTicket(r, rBoard, rTodo, { title: "Later", deadline: "2026-08-20" }, now).state;
+r = Model.createTicket(r, rBoard, rDone, { title: "Finished", deadline: "2026-08-16" }, now).state;
+const cands = Model.reminderCandidates(r, "2026-08-17");
+assert.deepStrictEqual(cands.map((c) => c.title).sort(), ["Due", "Late"]);
+assert.strictEqual(cands.find((c) => c.title === "Due").kind, "due-today");
+assert.strictEqual(cands.find((c) => c.title === "Late").kind, "overdue");
+const dueId = r.boards[0].columns[0].tickets.find((t) => t.title === "Due").id;
+r = Model.markTicketReminded(r, dueId, "2026-08-17").state;
+assert.strictEqual(Model.reminderCandidates(r, "2026-08-17").map((c) => c.title).join(","), "Late");
+
+const recap = Model.hoverRecap(r, "2026-08-17");
+assert.strictEqual(recap.boardName, "Personal");
+assert.strictEqual(recap.overdueCount, 1);
+assert.strictEqual(Model.hoverRecap(r, "2026-08-16").overdueCount, 0);
+assert.strictEqual(
+  Model.recapLine(r, "2026-08-17"),
+  "Personal · Todo 3 · In Progress 0 · Done 1 · Overdue 1"
+);
+assert.strictEqual(Model.recapLine(null, "2026-08-17"), "Easy Kanban");
+
+const payload = Model.savePayload(r);
+assert.strictEqual(payload.version, 1);
+assert.ok(!JSON.stringify(payload).includes("unknown"));
+payload.boards[0].columns[0].tickets.forEach((t) => {
+  assert.deepStrictEqual(Object.keys(t).sort(), [
+    "createdAt", "deadline", "description", "id", "lastReminderDate", "title"
+  ]);
+});
+assert.strictEqual(Model.notificationTitle("Personal"), "Easy Kanban · Personal");
+assert.strictEqual(Model.notificationBody({ kind: "due-today", title: "X" }), "X is due today");
+assert.strictEqual(Model.notificationBody({ kind: "overdue", title: "X" }), "X is overdue");
+assert.strictEqual(Model.formatDay("2026-08-17T10:00:00.000Z"), "17 Aug 2026");
+assert.strictEqual(Model.formatDay("2026-08-20"), "20 Aug 2026");
+assert.strictEqual(Model.sanitizeNotify("hi\n\u0000there"), "hi there");
+assert.ok(Model.sanitizeNotify("x".repeat(200)).length <= 160);
+
+console.log("test-model: ok");

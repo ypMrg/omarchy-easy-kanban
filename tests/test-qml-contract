@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+python3 - "$root" <<'PY'
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+widget = (root / "Widget.qml").read_text(encoding="utf-8")
+panel = (root / "Panel.qml").read_text(encoding="utf-8")
+column = (root / "ColumnView.qml").read_text(encoding="utf-8")
+card = (root / "TicketCard.qml").read_text(encoding="utf-8")
+editor = (root / "TicketEditor.qml").read_text(encoding="utf-8")
+palette = (root / "ColorPalette.qml").read_text(encoding="utf-8")
+name_dialog = (root / "NameDialog.qml").read_text(encoding="utf-8")
+
+assert "BarWidget {" in widget
+assert 'moduleName: "io.github.ypmrg.omarchy-easy-kanban"' in widget
+assert "function open()" in widget
+assert "function close()" in widget
+assert "readonly property bool opened" in widget
+assert "FileView" in widget
+assert "atomicWrites: true" in widget
+assert "easy-kanban.json" in widget
+assert "KeyboardPanel" in widget
+assert "BarIconButton" in widget
+assert "Lucide columns-3" in widget
+assert "tooltipText" in widget
+assert "recapLine" in widget
+assert "PanelToolTip" not in widget
+assert "omarchy reminder" not in widget
+assert "omarchy-notification-send" in widget
+assert "checkReminders" in widget
+assert "60000" in widget
+assert "Model.recapLine(store, Model.todayKey(new Date()))" in widget
+assert "allowColumnScroll" in widget
+assert "cardChromeX" in widget
+assert "minInnerWidth" in widget
+assert "root.backedUp = true" in widget
+assert "Style.space(520)" in widget
+assert "ticketEditing ? panel.availableCardHeight" not in widget
+
+assert "boardSwitcher" in panel
+assert "New board" in panel
+assert "Add column" in panel
+assert "pendingBoardId" in panel
+popup = (root / "PopupList.qml").read_text(encoding="utf-8")
+assert "Rename board" in panel or "Rename board" in popup
+assert "Delete board" in panel or "Delete board" in popup
+assert "headerFlick" not in panel
+assert "ConfirmDialog" in panel
+assert "Board file was reset" in panel
+assert "Style.space(240)" in widget or "Style.space(240)" in panel
+assert "omarchy-easy-kanban-editor" in panel
+assert "focusedTicketId" in panel
+assert "handleMoveRequested" in panel
+assert "handleFocusMove" in panel
+assert "handleKey" in panel
+assert "ensureFocus" in panel
+assert "focusedOnBoard" in panel
+assert "ShiftModifier" in panel
+assert "PanelKeyCatcher" not in widget
+assert "keyWrap" not in widget
+assert "shortcutHint" in panel
+assert "Shift+arrows" in panel
+assert "result.state" in panel
+assert "Could not save board" in widget or "saveError" in panel
+
+assert (root / "ColumnView.qml").is_file()
+assert (root / "TicketCard.qml").is_file()
+for name in ["ColorPalette.qml", "NameDialog.qml", "SelectTrigger.qml", "PopupList.qml", "TicketEditor.qml"]:
+    assert (root / name).is_file(), name
+
+assert "DropArea" in column
+assert '"+"' in column or 'text: "+"' in column
+assert "today: root.doneColumn" not in column
+assert "today: root.today" in column
+assert "Due today" in card
+assert "Overdue" in card
+assert "Created" in card
+assert "formatDay" in card
+assert "OpenHandCursor" in card
+assert "MouseArea" in card or "DragHandler" in card
+assert "PALETTE" in palette or "#E85D4C" in palette
+assert "YYYY-MM-DD" in editor
+assert "Move to" in editor
+assert "Clear" in editor
+assert 'mode: "read"' in editor or "property string mode" in editor
+assert "Edit" in editor
+assert "ScrollBar" in editor
+assert "descFlick" in editor
+assert "TextEdit" in editor
+assert "moveOpen" in editor
+assert "normalizeHex(colorPalette.draft)" in name_dialog
+
+assert "Key_Escape" in widget
+print("test-qml-contract: ok")
+PY
