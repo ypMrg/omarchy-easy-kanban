@@ -52,13 +52,10 @@ Click the bar icon to open the board panel. Drag a card to move it between colum
 | ---------------- | ----------------------------------------------------------- |
 | `Esc`            | Close the open dialog, or the panel if none                 |
 | `N`              | New ticket in the focused card’s column (first if none)     |
-| `Shift` + arrows | Move focus to another card (skips empty columns)            |
-| `H` / Left       | Move focused card one column left                           |
-| `L` / Right      | Move focused card one column right                          |
-| `J` / Down       | Move focused card down in its column                        |
-| `K` / Up         | Move focused card up in its column                          |
+| Arrows / `HJKL`  | Move focus to another card or empty column                  |
+| `Shift` + arrows | Move the focused card (column or order)                     |
 
-Keys at the edge of a board or column are no-ops. Move keys are ignored while a dialog or text field is open.
+Keys at the edge of a board or column are no-ops. Move keys are ignored while a dialog or text field is open. When columns overflow the panel, moving a card (keyboard or drag) scrolls the hidden columns into view.
 
 ## Deadlines and reminders
 

@@ -49,6 +49,22 @@ assert.strictEqual(Model.panelWidth(3, 240, 10, 24, 2000), 24 + 3 * 240 + 2 * 10
 assert.strictEqual(Model.panelWidth(1, 240, 10, 24, 2000), 24 + 240);
 assert.strictEqual(Model.panelWidth(8, 240, 10, 24, 800), 800);
 
+assert.strictEqual(Model.columnOffset(0, 240, 10, 6), 6);
+assert.strictEqual(Model.columnOffset(2, 240, 10, 6), 6 + 2 * 250);
+assert.strictEqual(Model.scrollToReveal(0, 400, 0, 240, 1000), 0);
+assert.strictEqual(Model.scrollToReveal(0, 400, 500, 240, 1000), 340);
+assert.strictEqual(Model.scrollToReveal(200, 400, 50, 240, 1000), 50);
+assert.strictEqual(Model.scrollToReveal(0, 400, 900, 240, 500), 500);
+assert.deepStrictEqual(Model.focusInColumn({ id: "col-empty", tickets: [] }, 3), {
+  columnId: "col-empty", ticketId: ""
+});
+assert.deepStrictEqual(Model.focusInColumn({
+  id: "col-a", tickets: [{ id: "tkt-1" }, { id: "tkt-2" }]
+}, 0), { columnId: "col-a", ticketId: "tkt-1" });
+assert.deepStrictEqual(Model.focusInColumn({
+  id: "col-a", tickets: [{ id: "tkt-1" }, { id: "tkt-2" }]
+}, 9), { columnId: "col-a", ticketId: "tkt-2" });
+
 const state = Model.defaultState(now);
 assert.strictEqual(state.version, 1);
 assert.strictEqual(state.boards.length, 1);

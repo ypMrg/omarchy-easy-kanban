@@ -39,14 +39,23 @@ Item {
   readonly property string createdLabel: Model.formatDay(createdAt)
   readonly property string dueLabel: Model.formatDay(deadlineText)
   readonly property string columnLabel: Model.labelOf(columnOptions, columnId)
+  readonly property color selectionFill: Style.selectionFillFor(Color.foreground, Color.accent)
 
-  onOpenedChanged: {
-    root.moveOpen = false
-    if (!opened) return
+  function focusBody() {
     if (root.writing)
-      Qt.callLater(function() { titleField.forceActiveFocus() })
+      titleField.forceActiveFocus()
+    else if (root.reading)
+      titleRead.forceActiveFocus()
   }
-  onModeChanged: root.moveOpen = false
+
+  function armEditor() {
+    root.moveOpen = false
+    if (opened)
+      Qt.callLater(root.focusBody)
+  }
+
+  onOpenedChanged: root.armEditor()
+  onModeChanged: root.armEditor()
 
   function submit() {
     if (!canSave) return
@@ -136,14 +145,21 @@ Item {
         visible: root.reading
         height: visible ? implicitHeight : 0
 
-        Text {
+        TextEdit {
+          id: titleRead
           width: parent.width
+          readOnly: true
+          selectByMouse: true
+          activeFocusOnPress: true
           text: root.title
           color: Color.foreground
           font.family: Style.font.family
           font.pixelSize: Style.font.body
           font.bold: true
-          wrapMode: Text.Wrap
+          wrapMode: TextEdit.Wrap
+          selectedTextColor: Color.foreground
+          selectionColor: root.selectionFill
+          Keys.onPressed: function(event) { root.eatEsc(event) }
         }
 
         Repeater {
@@ -167,7 +183,7 @@ Item {
           id: readDescBox
           width: parent.width
           visible: root.description !== ""
-          height: visible ? Math.min(root.descMax, descRead.implicitHeight) : 0
+          height: visible ? Math.min(root.descMax, descRead.contentHeight) : 0
 
           Flickable {
             id: readDescFlick
@@ -176,18 +192,33 @@ Item {
             boundsBehavior: Flickable.StopAtBounds
             flickableDirection: Flickable.VerticalFlick
             contentWidth: width
-            contentHeight: descRead.implicitHeight
+            contentHeight: descRead.contentHeight
             interactive: readDescBox.readOverflow
             flickDeceleration: 1500
 
-            Text {
+            function ensureCursorVisible() {
+              var r = descRead.cursorRectangle
+              if (r.y < contentY)
+                contentY = Math.max(0, r.y)
+              else if (r.y + r.height > contentY + height)
+                contentY = Math.min(Math.max(0, contentHeight - height), r.y + r.height - height)
+            }
+
+            TextEdit {
               id: descRead
               width: readDescFlick.width
+              readOnly: true
+              selectByMouse: true
+              activeFocusOnPress: true
               text: root.description
               color: Color.foreground
               font.family: Style.font.family
               font.pixelSize: Style.font.body
-              wrapMode: Text.Wrap
+              wrapMode: TextEdit.Wrap
+              selectedTextColor: Color.foreground
+              selectionColor: root.selectionFill
+              onCursorRectangleChanged: readDescFlick.ensureCursorVisible()
+              Keys.onPressed: function(event) { root.eatEsc(event) }
             }
 
             QQC.ScrollBar.vertical: QQC.ScrollBar {
@@ -195,7 +226,7 @@ Item {
             }
           }
 
-          readonly property bool readOverflow: descRead.implicitHeight > height + 1
+          readonly property bool readOverflow: descRead.contentHeight > height + 1
         }
 
         Row {
@@ -284,7 +315,7 @@ Item {
               font.pixelSize: Style.font.body
               color: Color.foreground
               selectedTextColor: Color.foreground
-              selectionColor: Style.selectionFillFor(Color.foreground, Color.accent)
+              selectionColor: root.selectionFill
               leftPadding: Style.spacing.controlPaddingX
               rightPadding: Style.spacing.controlPaddingX
               topPadding: Style.spacing.inputPaddingY

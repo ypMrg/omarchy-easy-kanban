@@ -8,6 +8,7 @@ Item {
 
   property var column
   property string focusedTicketId
+  property bool columnFocused: false
   property int columnWidth
 
   signal addTicketRequested(string columnId)
@@ -16,7 +17,10 @@ Item {
   signal deleteRequested(string columnId)
   signal ticketClicked(string ticketId)
   signal ticketFocused(string ticketId)
+  signal columnFocusRequested(string columnId)
   signal ticketDropRequested(string ticketId, string toColumnId, int toIndex)
+  signal ticketDragMoved(real globalX)
+  signal ticketDragEnded()
   signal columnReorderRequested(string columnId, int toIndex)
 
   width: columnWidth
@@ -185,8 +189,11 @@ Item {
 
       Rectangle {
         anchors.fill: parent
-        visible: dropArea.containsDrag
-        color: Util.alpha(Color.accent, 0.12)
+        visible: dropArea.containsDrag || (root.columnFocused && root.tickets.length === 0)
+        color: Util.alpha(Color.accent, dropArea.containsDrag ? 0.12 : 0.08)
+        border.width: root.columnFocused && root.tickets.length === 0 ? 1 : 0
+        border.color: Color.accent
+        radius: Style.cornerRadius
       }
     }
 
@@ -197,8 +204,15 @@ Item {
       boundsBehavior: Flickable.StopAtBounds
       flickableDirection: Flickable.VerticalFlick
       contentWidth: width
-      contentHeight: ticketCol.implicitHeight
-      interactive: contentHeight > height
+      contentHeight: Math.max(ticketCol.implicitHeight, height)
+      interactive: ticketCol.implicitHeight > height
+
+      MouseArea {
+        z: -1
+        width: ticketFlick.width
+        height: Math.max(ticketCol.implicitHeight, ticketFlick.height)
+        onClicked: root.columnFocusRequested(root.columnId)
+      }
 
       Column {
         id: ticketCol
@@ -217,8 +231,10 @@ Item {
             today: root.today
             onClicked: root.ticketClicked(modelData.id)
             onFocusRequested: root.ticketFocused(modelData.id)
+            onDragMoved: function(gx) { root.ticketDragMoved(gx) }
             onDragReleased: function(gx, gy) {
               root.routeTicketDrop(modelData.id, gx, gy)
+              root.ticketDragEnded()
             }
           }
         }

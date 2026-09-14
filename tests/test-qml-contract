@@ -59,6 +59,10 @@ assert "Board file was reset" in panel
 assert "Style.space(240)" in widget or "Style.space(240)" in panel
 assert "omarchy-easy-kanban-editor" in panel
 assert "focusedTicketId" in panel
+assert "focusedColumnId" in panel
+assert "ensureColumnVisible" in panel
+assert "scrollColumnsForDrag" in panel
+assert "columns[nextCol].tickets && columns[nextCol].tickets.length > 0" not in panel
 assert "handleMoveRequested" in panel
 assert "handleFocusMove" in panel
 assert "handleKey" in panel
@@ -68,7 +72,15 @@ assert "ShiftModifier" in panel
 assert "PanelKeyCatcher" not in widget
 assert "keyWrap" not in widget
 assert "shortcutHint" in panel
-assert "Shift+arrows" in panel
+assert "Shift+arrows focus" not in panel
+assert "Arrows/HJKL focus" in panel
+assert "Shift+arrows move" in panel
+assert "handleMoveRequested(dx, dy)" in panel
+idx_shift = panel.find("if (event.modifiers & Qt.ShiftModifier)")
+idx_move = panel.find("handleMoveRequested(dx, dy)")
+idx_focus = panel.find("handleFocusMove(dx, dy)")
+assert idx_shift != -1 and idx_move != -1 and idx_focus != -1
+assert idx_shift < idx_move < idx_focus
 assert "result.state" in panel
 assert "Could not save board" in widget or "saveError" in panel
 
@@ -77,6 +89,8 @@ assert (root / "TicketCard.qml").is_file()
 for name in ["ColorPalette.qml", "NameDialog.qml", "SelectTrigger.qml", "PopupList.qml", "TicketEditor.qml"]:
     assert (root / name).is_file(), name
 
+assert "columnFocusRequested" in column
+assert "ticketDragMoved" in column
 assert "DropArea" in column
 assert '"+"' in column or 'text: "+"' in column
 assert "today: root.doneColumn" not in column
@@ -86,6 +100,7 @@ assert "Overdue" in card
 assert "Created" in card
 assert "formatDay" in card
 assert "OpenHandCursor" in card
+assert "dragMoved" in card
 assert "MouseArea" in card or "DragHandler" in card
 assert "PALETTE" in palette or "#E85D4C" in palette
 assert "YYYY-MM-DD" in editor
@@ -96,6 +111,10 @@ assert "Edit" in editor
 assert "ScrollBar" in editor
 assert "descFlick" in editor
 assert "TextEdit" in editor
+assert "id: titleRead" in editor
+assert "id: descRead" in editor
+assert editor.count("readOnly: true") >= 2
+assert "selectByMouse: true" in editor
 assert "moveOpen" in editor
 assert "normalizeHex(colorPalette.draft)" in name_dialog
 

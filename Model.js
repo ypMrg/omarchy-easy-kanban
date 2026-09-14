@@ -104,6 +104,33 @@ function panelWidth(columnCount, columnWidth, columnGap, padding, maxWidth) {
   return maxWidth > 0 ? Math.min(w, maxWidth) : w;
 }
 
+function columnOffset(index, columnWidth, gap, padding) {
+  var i = typeof index === "number" && index > 0 ? index : 0;
+  return padding + i * (columnWidth + gap);
+}
+
+function scrollToReveal(contentX, viewWidth, itemX, itemWidth, maxContentX) {
+  var next = contentX;
+  if (itemX < contentX) next = itemX;
+  else if (itemX + itemWidth > contentX + viewWidth) next = itemX + itemWidth - viewWidth;
+  if (next < 0) next = 0;
+  if (typeof maxContentX === "number" && next > maxContentX) next = maxContentX;
+  return next;
+}
+
+function focusInColumn(column, preferredIndex) {
+  if (!column) return { columnId: "", ticketId: "" };
+  var tickets = column.tickets || [];
+  var ticketId = "";
+  if (tickets.length > 0) {
+    var i = typeof preferredIndex === "number" ? preferredIndex : 0;
+    if (i < 0) i = 0;
+    if (i >= tickets.length) i = tickets.length - 1;
+    ticketId = tickets[i] && tickets[i].id ? tickets[i].id : "";
+  }
+  return { columnId: column.id || "", ticketId: ticketId };
+}
+
 function defaultColumns() {
   return [
     { id: newId("col"), name: "Todo", color: FALLBACK_COLOR, tickets: [] },
@@ -598,6 +625,9 @@ if (typeof module !== "undefined") {
     validDescription: validDescription,
     validDeadline: validDeadline,
     panelWidth: panelWidth,
+    columnOffset: columnOffset,
+    scrollToReveal: scrollToReveal,
+    focusInColumn: focusInColumn,
     defaultState: defaultState,
     parseState: parseState,
     cloneState: cloneState,

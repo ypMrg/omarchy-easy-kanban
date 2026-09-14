@@ -12,6 +12,7 @@ BorderSurface {
 
   signal clicked()
   signal focusRequested()
+  signal dragMoved(real globalX)
   signal dragReleased(real globalX, real globalY)
 
   readonly property bool due: ticket ? Model.dueToday(ticket.deadline, today) : false
@@ -116,14 +117,17 @@ BorderSurface {
       ghost.x = p.x
       ghost.y = p.y
     }
-    onPositionChanged: function() {
-      if (drag.active)
-        dragging = true
+    onPositionChanged: function(mouse) {
+      if (!drag.active) return
+      dragging = true
+      var g = mapToGlobal(mouse.x, mouse.y)
+      root.dragMoved(g.x)
     }
     onReleased: function(mouse) {
-      if (!dragging) return
-      var g = mapToGlobal(mouse.x, mouse.y)
-      root.dragReleased(g.x, g.y)
+      if (dragging) {
+        var g = mapToGlobal(mouse.x, mouse.y)
+        root.dragReleased(g.x, g.y)
+      }
       ghost.x = 0
       ghost.y = 0
     }

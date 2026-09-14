@@ -14,7 +14,10 @@ Item {
   property string actionError
   property bool recovered
   property string focusedTicketId
+  property string focusedColumnId: ""
   property bool allowColumnScroll: false
+  property bool ticketDragging: false
+  property real dragGlobalX: 0
   signal mutationRequested(var result)
 
   property int columnWidth: Style.space(240)
@@ -96,6 +99,7 @@ Item {
     if (!found || !found.ticket) return false
     pendingTicketId = ticketId
     focusedTicketId = ticketId
+    if (found.column && found.column.id) focusedColumnId = found.column.id
     ticketEditor.title = found.ticket.title || ""
     ticketEditor.description = found.ticket.description || ""
     ticketEditor.deadlineText = found.ticket.deadline ? found.ticket.deadline : ""
@@ -126,13 +130,12 @@ Item {
   function handleTicketDrop(ticketId, toColumnId, toIndex) {
     if (!store || !active) return
     var result = Model.moveTicket(store, active.id, ticketId, toColumnId, toIndex)
-    if (result && result.moved) mutationRequested(result)
-  }
-
-  function ticketAt(column, index) {
-    var tickets = column && column.tickets ? column.tickets : []
-    if (index < 0 || index >= tickets.length) return ""
-    return tickets[index].id || ""
+    if (result && result.moved) {
+      mutationRequested(result)
+      focusedTicketId = ticketId
+      focusedColumnId = toColumnId
+      ensureColumnVisible(columnIndexById(toColumnId))
+    }
   }
 
   function focusedOnBoard() {
@@ -141,10 +144,63 @@ Item {
     return (found && found.board && found.board.id === active.id) ? found : null
   }
 
+  function columnIndexById(columnId) {
+    if (!active || !active.columns || !columnId) return -1
+    var i
+    for (i = 0; i < active.columns.length; i++) {
+      if (active.columns[i].id === columnId) return i
+    }
+    return -1
+  }
+
+  function focusedColumnIndex() {
+    var found = focusedOnBoard()
+    if (found) return found.columnIndex
+    return columnIndexById(focusedColumnId)
+  }
+
+  function applyFocus(target) {
+    if (!target) return
+    focusedColumnId = target.columnId || ""
+    focusedTicketId = target.ticketId || ""
+    ensureColumnVisible(columnIndexById(target.columnId))
+  }
+
+  function ensureColumnVisible(index) {
+    if (!allowColumnScroll || index < 0) return
+    var itemX = Model.columnOffset(index, columnWidth, columnGap, horizontalPadding / 2)
+    var maxX = Math.max(0, columnFlick.contentWidth - columnFlick.width)
+    columnFlick.contentX = Model.scrollToReveal(
+      columnFlick.contentX, columnFlick.width, itemX, columnWidth, maxX
+    )
+  }
+
+  function scrollColumnsForDrag() {
+    if (!allowColumnScroll || !ticketDragging) return
+    var p = columnFlick.mapFromGlobal(dragGlobalX, 0)
+    var margin = Style.space(36)
+    var step = Style.space(14)
+    var maxX = Math.max(0, columnFlick.contentWidth - columnFlick.width)
+    if (p.x < margin)
+      columnFlick.contentX = Math.max(0, columnFlick.contentX - step)
+    else if (p.x > columnFlick.width - margin)
+      columnFlick.contentX = Math.min(maxX, columnFlick.contentX + step)
+  }
+
   function ensureFocus() {
-    if (focusedOnBoard()) return
-    focusedTicketId = active && active.columns && active.columns.length > 0
-      ? ticketAt(active.columns[0], 0) : ""
+    var found = focusedOnBoard()
+    if (found) {
+      if (found.column && found.column.id)
+        focusedColumnId = found.column.id
+      return
+    }
+    if (focusedColumnId && findColumn(focusedColumnId)) return
+    if (!active || !active.columns || active.columns.length === 0) {
+      focusedTicketId = ""
+      focusedColumnId = ""
+      return
+    }
+    applyFocus(Model.focusInColumn(active.columns[0], 0))
   }
 
   onStoreChanged: ensureFocus()
@@ -155,24 +211,23 @@ Item {
     if (overlayOpen || textInputActive) return false
     var dx = 0
     var dy = 0
-    var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right
-        || event.key === Qt.Key_Up || event.key === Qt.Key_Down
     var ch = event.text ? String(event.text).toLowerCase() : ""
     if (event.key === Qt.Key_Left || ch === "h") dx = -1
     else if (event.key === Qt.Key_Right || ch === "l") dx = 1
     else if (event.key === Qt.Key_Up || ch === "k") dy = -1
     else if (event.key === Qt.Key_Down || ch === "j") dy = 1
     if (dx !== 0 || dy !== 0) {
-      if (event.modifiers & Qt.ShiftModifier) {
-        if (arrow) handleFocusMove(dx, dy)
-      } else {
+      if (event.modifiers & Qt.ShiftModifier)
         handleMoveRequested(dx, dy)
-      }
+      else
+        handleFocusMove(dx, dy)
       return true
     }
     if (ch !== "n" || !active || !active.columns || active.columns.length === 0) return false
     var found = focusedOnBoard()
-    requestAddTicket(found && found.column ? found.column.id : active.columns[0].id)
+    var colId = found && found.column ? found.column.id : focusedColumnId
+    if (!colId) colId = active.columns[0].id
+    requestAddTicket(colId)
     return true
   }
 
@@ -180,28 +235,20 @@ Item {
     if (overlayOpen || !store || !active) return
     var columns = active.columns
     if (!columns || columns.length === 0) return
+    var colIdx = focusedColumnIndex()
     var found = focusedOnBoard()
-    if (!found) {
+    if (colIdx < 0) {
       ensureFocus()
       return
     }
     if (dx !== 0) {
-      var step = dx < 0 ? -1 : 1
-      var nextCol = found.columnIndex + step
-      while (nextCol >= 0 && nextCol < columns.length) {
-        if (columns[nextCol].tickets && columns[nextCol].tickets.length > 0) {
-          var destLen = columns[nextCol].tickets.length
-          focusedTicketId = ticketAt(columns[nextCol], Math.max(0, Math.min(found.ticketIndex, destLen - 1)))
-          return
-        }
-        nextCol += step
-      }
+      var nextCol = colIdx + (dx < 0 ? -1 : 1)
+      if (nextCol < 0 || nextCol >= columns.length) return
+      applyFocus(Model.focusInColumn(columns[nextCol], found ? found.ticketIndex : 0))
       return
     }
-    if (dy !== 0) {
-      var nextId = ticketAt(columns[found.columnIndex], found.ticketIndex + (dy < 0 ? -1 : 1))
-      if (nextId !== "") focusedTicketId = nextId
-    }
+    if (dy === 0 || !found) return
+    applyFocus(Model.focusInColumn(columns[colIdx], found.ticketIndex + (dy < 0 ? -1 : 1)))
   }
 
   function handleMoveRequested(dx, dy) {
@@ -211,11 +258,12 @@ Item {
     var toColumnId = found.column.id
     var toIndex = found.ticketIndex
     var columns = active.columns
+    var destIndex = found.columnIndex
     if (dx !== 0) {
-      var colIdx = found.columnIndex + (dx < 0 ? -1 : 1)
-      if (colIdx < 0 || colIdx >= columns.length) return
-      toColumnId = columns[colIdx].id
-      var destLen = columns[colIdx].tickets ? columns[colIdx].tickets.length : 0
+      destIndex = found.columnIndex + (dx < 0 ? -1 : 1)
+      if (destIndex < 0 || destIndex >= columns.length) return
+      toColumnId = columns[destIndex].id
+      var destLen = columns[destIndex].tickets ? columns[destIndex].tickets.length : 0
       toIndex = Math.max(0, Math.min(found.ticketIndex, destLen))
     } else if (dy !== 0) {
       toIndex = found.ticketIndex + dy
@@ -224,7 +272,11 @@ Item {
       return
     }
     var result = Model.moveTicket(store, active.id, focusedTicketId, toColumnId, toIndex)
-    if (result && result.moved) mutationRequested(result)
+    if (result && result.moved) {
+      mutationRequested(result)
+      focusedColumnId = toColumnId
+      ensureColumnVisible(destIndex)
+    }
   }
 
   function handleColumnReorder(columnId, toIndex) {
@@ -297,7 +349,13 @@ Item {
         deadline: fields.deadline
       }, new Date())
       mutationRequested(result)
-      if (result && result.ok) ticketEditor.opened = false
+      if (result && result.ok) {
+        ticketEditor.opened = false
+        if (result.ticketId) {
+          focusedTicketId = result.ticketId
+          focusedColumnId = fields.columnId || focusedColumnId
+        }
+      }
       return
     }
     var found = Model.findTicket(store, pendingTicketId)
@@ -435,7 +493,7 @@ Item {
       ? Math.max(width, columnRow.implicitWidth + root.horizontalPadding)
       : width
     contentHeight: height
-    interactive: root.allowColumnScroll && contentWidth > width + 1
+    interactive: root.allowColumnScroll && !root.ticketDragging && contentWidth > width + 1
 
     Row {
       id: columnRow
@@ -450,6 +508,7 @@ Item {
           required property var modelData
           column: modelData
           focusedTicketId: root.focusedTicketId
+          columnFocused: modelData && modelData.id === root.focusedColumnId
           columnWidth: root.columnWidth
           height: columnRow.height
           onAddTicketRequested: function(columnId) { root.requestAddTicket(columnId) }
@@ -457,10 +516,25 @@ Item {
           onRecolorRequested: function(columnId) { root.openColumnDialog(columnId, "color") }
           onDeleteRequested: function(columnId) { root.requestDeleteColumn(columnId) }
           onTicketClicked: function(ticketId) { root.openTicket(ticketId, "read") }
-          onTicketFocused: function(ticketId) { root.focusedTicketId = ticketId }
+          onTicketFocused: function(ticketId) {
+            var found = Model.findTicket(root.store, ticketId)
+            root.applyFocus(Model.focusInColumn(
+              found && found.column ? found.column : null,
+              found ? found.ticketIndex : 0
+            ))
+          }
+          onColumnFocusRequested: function(columnId) {
+            root.applyFocus(Model.focusInColumn(root.findColumn(columnId), 0))
+          }
           onTicketDropRequested: function(ticketId, toColumnId, toIndex) {
             root.handleTicketDrop(ticketId, toColumnId, toIndex)
           }
+          onTicketDragMoved: function(gx) {
+            root.ticketDragging = true
+            root.dragGlobalX = gx
+            root.scrollColumnsForDrag()
+          }
+          onTicketDragEnded: root.ticketDragging = false
           onColumnReorderRequested: function(columnId, toIndex) {
             root.handleColumnReorder(columnId, toIndex)
           }
@@ -469,12 +543,21 @@ Item {
     }
   }
 
+  Timer {
+    id: edgeScrollTimer
+    interval: 16
+    repeat: true
+    running: root.ticketDragging && root.allowColumnScroll
+        && columnFlick.contentWidth > columnFlick.width + 1
+    onTriggered: root.scrollColumnsForDrag()
+  }
+
   Text {
     id: shortcutHint
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.bottom: parent.bottom
-    text: "N new ticket  ·  Shift+arrows focus  ·  Arrows/HJKL move  ·  Esc"
+    text: "N new ticket  ·  Arrows/HJKL focus  ·  Shift+arrows move  ·  Esc"
     color: Color.muted
     font.family: Style.font.family
     font.pixelSize: Style.font.caption
