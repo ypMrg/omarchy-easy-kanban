@@ -35,7 +35,10 @@ Boards are saved locally to:
 ~/.local/state/omarchy/easy-kanban.json
 ```
 
-There is no cloud sync. A bad file is copied to `easy-kanban.json.bak` and replaced with a clean default on the next save.
+There is no cloud sync. Every bar instance shares this file, including one
+widget per monitor: a save on one screen reloads the others. A bad file is
+copied to `easy-kanban.json.bak` and replaced with a clean default on the next
+save.
 
 ## Hover recap
 

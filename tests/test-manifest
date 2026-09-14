@@ -15,7 +15,7 @@ assert data["schemaVersion"] == 1
 assert data["id"] == "io.github.ypmrg.omarchy-easy-kanban"
 assert not data["id"].startswith("omarchy.")
 assert data["name"] == "Easy Kanban"
-assert data["version"] == "0.1.0"
+assert data["version"] == "0.1.2"
 assert data["author"] == "Matthieu G.C."
 assert data["license"] == "MIT"
 assert data["kinds"] == ["bar-widget"]

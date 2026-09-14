@@ -20,6 +20,13 @@ assert "function close()" in widget
 assert "readonly property bool opened" in widget
 assert "FileView" in widget
 assert "atomicWrites: true" in widget
+assert "watchChanges: true" in widget
+assert "watchChanges: false" not in widget
+assert "onFileChanged" in widget
+assert "if (storeReady) return" not in widget
+assert "root.dirty = false" in widget
+assert "reloadFromDisk" in widget
+assert "lastWritten" in widget
 assert "easy-kanban.json" in widget
 assert "KeyboardPanel" in widget
 assert "BarIconButton" in widget

@@ -16,6 +16,7 @@ BarWidget {
   property bool storeReady: false
   property bool recovered: false
   property bool dirty: false
+  property string lastWritten: ""
   property string saveError: ""
   property string actionError: ""
   property int reminderCursor: 0
@@ -45,6 +46,11 @@ BarWidget {
 
   function close() {
     popupOpen = false
+  }
+
+  function reloadFromDisk() {
+    if (!root.dirsReady) return
+    stateFile.reload()
   }
 
   function applyMutation(result) {
@@ -78,7 +84,9 @@ BarWidget {
   function flushSave() {
     if (saveBlocked()) return
     saveTimer.stop()
-    stateFile.setText(JSON.stringify(Model.savePayload(store), null, 2) + "\n")
+    var payload = JSON.stringify(Model.savePayload(store), null, 2) + "\n"
+    root.lastWritten = payload
+    stateFile.setText(payload)
   }
 
   readonly property string recapLine: storeReady
@@ -102,14 +110,20 @@ BarWidget {
   readonly property int boardContentWidth: Math.min(desiredCardWidth, halfScreenWidth)
 
   function parse(raw, existed) {
-    if (storeReady) return
+    if (root.dirty) return
+    if (root.storeReady && kanban && kanban.overlayOpen) return
+    if (root.storeReady && String(raw) === root.lastWritten) return
+    var firstLoad = !root.storeReady
     var result = Model.parseState(raw, new Date())
+    if (!firstLoad && result.recovered) return
     store = result.state
     recovered = result.recovered
-    fileExisted = existed
-    storeReady = true
-    if (result.recovered && existed && !backedUp)
-      backupProc.running = true
+    if (firstLoad) {
+      fileExisted = existed
+      storeReady = true
+      if (result.recovered && existed && !backedUp)
+        backupProc.running = true
+    }
   }
 
   function checkReminders() {
@@ -154,6 +168,7 @@ BarWidget {
       kanban.dismissOverlays()
       return
     }
+    root.reloadFromDisk()
     armKeys()
   }
 
@@ -206,21 +221,23 @@ BarWidget {
     id: stateFile
     path: root.statePath
     atomicWrites: true
-    watchChanges: false
+    watchChanges: true
     printErrors: false
     onLoaded: {
       if (!root.dirsReady) return
       root.parse(text(), true)
     }
     onLoadFailed: {
-      if (!root.dirsReady) return
+      if (!root.dirsReady || root.storeReady) return
       root.parse("", false)
     }
     onSaved: {
+      root.dirty = false
       root.saveError = ""
       root.recovered = false
     }
     onSaveFailed: root.saveError = "Could not save board"
+    onFileChanged: reload()
   }
 
   Timer {
@@ -330,8 +347,9 @@ BarWidget {
   Connections {
     target: kanban
     function onOverlayOpenChanged() {
-      if (!kanban.overlayOpen && root.popupOpen)
-        root.armKeys()
+      if (kanban.overlayOpen || !root.popupOpen) return
+      root.armKeys()
+      root.reloadFromDisk()
     }
   }
 }

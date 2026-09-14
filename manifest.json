@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.ypmrg.omarchy-easy-kanban",
   "name": "Easy Kanban",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "author": "Matthieu G.C.",
   "license": "MIT",
   "description": "Local Kanban boards from the Omarchy bar",
