@@ -29,6 +29,11 @@ Item {
   property string pendingColumnId: ""
   property string pendingTicketId: ""
   property string confirmKind: ""
+  readonly property var confirmMessages: ({
+    board: "Delete this board and all of its tickets?",
+    column: "Delete this column and its tickets?",
+    ticket: "Delete this ticket?"
+  })
   readonly property bool canDeleteBoard: !!(store && store.boards && store.boards.length > 1)
   readonly property var active: store ? Model.activeBoard(store) : null
   readonly property string activeId: active && active.id ? active.id : ""
@@ -91,6 +96,28 @@ Item {
     pendingColumnId = columnId
     confirmKind = "column"
     openConfirm(confirm)
+  }
+
+  function requestDeleteTicket(ticketId) {
+    pendingTicketId = ticketId || ""
+    focusedTicketId = ticketId
+    confirmKind = "ticket"
+    openConfirm(confirm)
+  }
+
+  function confirmDeleteTicket() {
+    if (!store || !active || pendingTicketId === "") return
+    mutationRequested(Model.deleteTicket(store, active.id, pendingTicketId))
+    if (focusedTicketId === pendingTicketId)
+      focusedTicketId = ""
+    pendingTicketId = ""
+  }
+
+  function resetDeleteState() {
+    pendingBoardId = ""
+    pendingColumnId = ""
+    pendingTicketId = ""
+    confirmKind = ""
   }
 
   function fillTicketEditor(ticketId) {
@@ -223,6 +250,12 @@ Item {
         handleFocusMove(dx, dy)
       return true
     }
+    if (event.key === Qt.Key_Delete) {
+      var target = focusedOnBoard()
+      if (!target || !target.ticket) return false
+      requestDeleteTicket(target.ticket.id)
+      return true
+    }
     if (ch !== "n" || !active || !active.columns || active.columns.length === 0) return false
     var found = focusedOnBoard()
     var colId = found && found.column ? found.column.id : focusedColumnId
@@ -290,10 +323,7 @@ Item {
     confirm.opened = false
     ticketDeleteConfirm.opened = false
     boardSwitcher.open = false
-    pendingBoardId = ""
-    pendingColumnId = ""
-    pendingTicketId = ""
-    confirmKind = ""
+    resetDeleteState()
   }
 
   function submitBoard(name) {
@@ -557,7 +587,7 @@ Item {
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.bottom: parent.bottom
-    text: "N new ticket  ·  Arrows/HJKL focus  ·  Shift+arrows move  ·  Esc"
+    text: "N new ticket  ·  Del delete  ·  Arrows/HJKL focus  ·  Shift+arrows move  ·  Esc"
     color: Color.muted
     font.family: Style.font.family
     font.pixelSize: Style.font.caption
@@ -616,11 +646,7 @@ Item {
       onConfirmed: {
         opened = false
         ticketEditor.opened = false
-        if (!root.store || !root.active || root.pendingTicketId === "") return
-        root.mutationRequested(Model.deleteTicket(root.store, root.active.id, root.pendingTicketId))
-        if (root.focusedTicketId === root.pendingTicketId)
-          root.focusedTicketId = ""
-        root.pendingTicketId = ""
+        root.confirmDeleteTicket()
       }
     }
   }
@@ -629,29 +655,25 @@ Item {
     id: confirm
     anchors.fill: parent
     z: 30
-    message: root.confirmKind === "board"
-      ? "Delete this board and all of its tickets?"
-      : "Delete this column and its tickets?"
+    message: root.confirmMessages[root.confirmKind] || ""
     Keys.onPressed: function(event) {
       if (handleKey(event)) event.accepted = true
     }
     onCanceled: {
       opened = false
-      root.pendingBoardId = ""
-      root.pendingColumnId = ""
-      root.confirmKind = ""
+      root.resetDeleteState()
     }
     onConfirmed: {
       opened = false
       if (root.confirmKind === "board" && root.store) {
         var boardId = root.pendingBoardId !== "" ? root.pendingBoardId : root.store.activeBoardId
         root.mutationRequested(Model.deleteBoard(root.store, boardId))
+      } else if (root.confirmKind === "ticket") {
+        root.confirmDeleteTicket()
       } else if (root.store && root.active && root.pendingColumnId !== "") {
         root.mutationRequested(Model.deleteColumn(root.store, root.active.id, root.pendingColumnId))
       }
-      root.pendingBoardId = ""
-      root.pendingColumnId = ""
-      root.confirmKind = ""
+      root.resetDeleteState()
     }
   }
 }

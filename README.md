@@ -52,6 +52,7 @@ Click the bar icon to open the board panel. Drag a card to move it between colum
 | ---------------- | ----------------------------------------------------------- |
 | `Esc`            | Close the open dialog, or the panel if none                 |
 | `N`              | New ticket in the focused card’s column (first if none)     |
+| `Del`            | Delete the focused card (asks for confirmation)             |
 | Arrows / `HJKL`  | Move focus to another card or empty column                  |
 | `Shift` + arrows | Move the focused card (column or order)                     |
 
